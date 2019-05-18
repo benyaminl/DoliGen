@@ -71,7 +71,7 @@ function generateSO(int $jumlah) : void {
 
     for ($j = 0; $j < $jumlah; $j++) { 
         #region Generate Data
-        $query = "SELECT p.*, rand() FROM ".MAIN_DB_PREFIX."product p WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga")." ORDER By 2 limit 2"; // Random take item
+        $query = "SELECT  rand(),p.* FROM ".MAIN_DB_PREFIX."product p WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga")." ORDER By 1 limit 2"; // Random take item
         
         /** @var DoliDB $db */
         $res = $db->query($query);
@@ -149,7 +149,7 @@ function generatePO(int $jumlah) : void {
     global $db, $user, $langs, $conf;
     for ($j=0; $j < $jumlah; $j++) { 
         // Mulai dengan tarik data dari commande
-        $queryBarang = "SELECT d.*, RAND(), p.cost_price FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product ORDER BY 2 LIMIT 2";
+        $queryBarang = "SELECT RAND(),d.*, p.cost_price FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product ORDER BY 1 LIMIT 2";
         $com = new CommandeFournisseur($db);
         /** @var DoliDB $db */
         $result = $db->query($queryBarang);
