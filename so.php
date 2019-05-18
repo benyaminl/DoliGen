@@ -65,11 +65,11 @@ if (!$res) {
 $langs->loadLangs(array('admin','orders','sendings','companies','bills','propal','supplier_proposal','deliveries','products','stocks','productbatch'));
 
 function generateSO(int $jumlah) : void {
-    global $db, $user, $langs; // Panggil DB diluar
+    global $db, $user, $langs, $conf; // Panggil DB diluar
     include_once DOL_DOCUMENT_ROOT."/commande/class/commande.class.php";
     include_once DOL_DOCUMENT_ROOT."/product/class/product.class.php";
 
-    for ($j = 1; $j < $jumlah; $j++) { 
+    for ($j = 0; $j < $jumlah; $j++) { 
         #region Generate Data
         $query = "SELECT * FROM ".MAIN_DB_PREFIX."product WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga");
         
@@ -115,8 +115,8 @@ function generateSO(int $jumlah) : void {
             $result = $com->create($user);
             
             if ($result) {
-                $com->addline($taken[0]["description"], $taken[0]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 1, 0, 0, $taken[0]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
-                $com->addline($taken[1]["description"], $taken[1]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 1, 0, 0, $taken[1]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
+                $com->addline($taken[0]["description"], $taken[0]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[0]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
+                $com->addline($taken[1]["description"], $taken[1]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[1]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
                 $db->commit();
                 echo "Berhasil - ".$j;
             } else {
@@ -129,7 +129,7 @@ function generateSO(int $jumlah) : void {
         #endregion       
     }
 
-    $query = "SELECT * FROM ".MAIN_DB_PREFIX."commande WHERE fk_statut = 0";
+    $query = "SELECT * FROM ".MAIN_DB_PREFIX."commande WHERE fk_statut = 0 AND entity = ".$conf->entity;
     $result = $db->query($query);
 
     if ($query) {
@@ -143,10 +143,11 @@ function generateSO(int $jumlah) : void {
     }
 }
 include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.commande.class.php"; // class founr commande
+include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.product.class.php";
 
 function generatePO(int $jumlah) : void {
-    global $db, $user, $langs;
-    for ($j=1; $j < $jumlah; $j++) { 
+    global $db, $user, $langs, $conf;
+    for ($j=0; $j < $jumlah; $j++) { 
         // Mulai dengan tarik data dari commande
         $queryBarang = "SELECT d.*, RAND(), p.cost_price FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product ORDER BY 2 LIMIT 2";
         $com = new CommandeFournisseur($db);
@@ -182,10 +183,8 @@ function generatePO(int $jumlah) : void {
             $result = $com->create($user);
 
             if ($result) {
-                $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data["qty"], $data["qty"] + 5), 1, 0, 0, $data[0]["fk_product"]);
-                $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data["qty"], $data["qty"] + 5), 1, 0, 0, $data[1]["fk_product"]);
-                $com->valid($user); // Then Validate
-                $com->generateDocument('muscadet', $langs);
+                $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data["qty"], $data["qty"] + 5), 0, 0, 0, $data[0]["fk_product"]);
+                $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data["qty"], $data["qty"] + 5), 0, 0, 0, $data[1]["fk_product"]);
                 $db->commit();
                 echo "Berhasil - ".$j;
             } else {
@@ -196,6 +195,21 @@ function generatePO(int $jumlah) : void {
             echo "Select Gagal!";
         }
     }
+    
+    $query = "SELECT * FROM ".MAIN_DB_PREFIX."commande_fournisseur WHERE fk_statut = 0 AND entity = ".$conf->entity;
+    $result = $db->query($query);
+
+    if ($query) {
+        $i = 0;
+        while ($i < $db->num_rows($result)) {
+            $row = $db->fetch_array($result);
+            $com->fetch($row[0]);
+            $com->valid($user); // Then Validate
+            echo $com->date_commande;
+            $com->generateDocument('', $langs);
+            $i++;
+        }
+    }
 }
 
 function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : void {
@@ -204,7 +218,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
     require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
     include_once DOL_DOCUMENT_ROOT."/commande/class/commande.class.php";
     include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.commande.class.php";
-    global $db, $user;
+    global $db, $user, $conf;
     
     if ($type == 'SO') {
         $table = 'llx_commande';
@@ -221,11 +235,12 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
     /** @var DoliDB $db */
     $query = "SELECT rowid, rand() FROM ".$table." WHERE fk_statut = $status and rowid not in (
         select fk_source from llx_element_element where sourcetype = '$source' and targettype = '$target'
-    ) ORDER by 2"; // select query from so or po that already created 
+    ) and entity = ".$conf->entity." ORDER by 2"; // select query from so or po that already created 
     $result = $db->query($query);
     
     if ($db->num_rows($result) == 0) {
         echo "Tidak ada data yang bisa di proses";
+        return;
     }
     
     if ($result) {
@@ -372,10 +387,19 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                                 // check if success then
                                 if ($paymentResult > 0) {
                                     // put to bank
-                                    $resPay = $pay->addPaymentToBank($user,'payment', 'Customer Payment'.$com->thirdparty->name, GETPOST("accid"), $com->thirdparty->name, '');
+                                    $tipePembayaran = "payment";
+                                    $arah = "Customer";
+                                    if ($type != "SO") {
+                                        $tipePembayaran = "payment_supplier";
+                                        $arah = "Supplier";
+                                    }
+                                    $resPay = $pay->addPaymentToBank($user, $tipePembayaran, $arah.' Payment', GETPOST("accid"), $com->thirdparty->name, '');
                                     if ($resPay > 0) {
                                         $db->commit();
                                         $com->classifyBilled($user); // Set it's billed
+                                        if ($type != "SO") {
+                                            dispatch($com);   
+                                        }
                                         echo "berhasil payment dan tutup";
                                     } else {
                                         $db->rollback();
@@ -401,6 +425,22 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
         var_dump($db->lasterror());
     }
 
+}
+/**
+ * Dispatch to Warehouse
+ *
+ * @param CommandeFournisseur $com
+ * @return void
+ */
+function dispatch($com) {
+    global $user;
+    $com->Livraison($user, $com->date_livraison, 'tot', 'All item recieved');
+    $com->fetch_lines();
+    $lines =$com->lines;
+    foreach ($lines as $key => $value) {
+        $com->dispatchProduct($user, $value->fk_product, $value->qty, GETPOST("whid"), $value->subprice);
+    }
+    echo "All Item dispatched to respected warehouse!";
 }
 
 if (GETPOSTISSET("btnKirim")) {
@@ -437,7 +477,8 @@ if (GETPOSTISSET("btnBikinINV")) {
     <h1>Bikin INV</h1>
     <input type=text name=jumlah placeholder="jumlah generate"></br>
     <input type="checkbox" name="pay" value="1"> Payment Directly <br/>
-    <input type=text name=accid placeholder="kode bank" value=1></br>
+    Bank Code : <input type=text name=accid placeholder="kode bank" value=1></br>
+    WH Code  : <input type=text name=whid placeholder="kode warehouse"></br>
     <button type=submit name=btnBikinINV value=SO>Generate dari SO</button>
     <button type=submit name=btnBikinINV value=PO>Generate dari PO</button>
 </form>
