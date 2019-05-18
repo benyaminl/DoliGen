@@ -201,6 +201,7 @@ function generatePO(int $jumlah) : void {
 function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : void {
     
     include_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+    require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
     include_once DOL_DOCUMENT_ROOT."/commande/class/commande.class.php";
     include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.commande.class.php";
     global $db, $user;
@@ -209,18 +210,24 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
         $table = 'llx_commande';
         $source = "commande";
         $target = "facture";
+        $status = 3;
     } else {
-        $table = 'llx_commande_fourn';
+        $table = 'llx_commande_fournisseur';
         $source = 'order_supplier';
         $target = 'invoice_supplier';
+        $status = 1;
     }
 
     /** @var DoliDB $db */
-    $query = "SELECT rowid, rand() FROM ".$table." WHERE fk_statut = 3 and rowid not in (
+    $query = "SELECT rowid, rand() FROM ".$table." WHERE fk_statut = $status and rowid not in (
         select fk_source from llx_element_element where sourcetype = '$source' and targettype = '$target'
     ) ORDER by 2"; // select query from so or po that already created 
     $result = $db->query($query);
-
+    
+    if ($db->num_rows($result) == 0) {
+        echo "Tidak ada data yang bisa di proses";
+    }
+    
     if ($result) {
         $i = 0;
         // Iterate check apakah ada invoice, kalau ga ada bikin
@@ -229,18 +236,104 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
             // Get the link between commande and invoice, is there any
             $query = "SELECT * FROM llx_element_element WHERE sourcetype = '".$source."' AND targettype = '".$target."' AND fk_source = ". $row["rowid"];
             $elRes = $db->query($query);
-            
-            $inv = new Facture($db); // Create facture object
 
             if ($type == 'SO') {
                 $com = new Commande($db); // Create the SO object and fetch
+                $inv = new Facture($db); // Create facture object
             } else {
                 $com = new CommandeFournisseur($db); // Create the supplier invoice
+                $inv = new FactureFournisseur($db);
             }
 
             $db->begin();
             $com->fetch($row["rowid"]); // 
-            $resultInvoice = $inv->createFromOrder($com, $user); // Pass the order to be processed by the facture
+            if ($type == 'SO') {
+                $resultInvoice = $inv->createFromOrder($com, $user); // Pass the order to be processed by the facture
+            } else {
+                $com->fetch_thirdparty();
+
+                if ($com->statut == 1) {
+                    $com->approve($user);
+                } 
+
+                if ($com->statut == 2) {
+                    $com->commande($user, $com->date, 4);
+                }
+
+                $date = new DateTime(date('Y-m-d',$com->date_livraison));
+                $date->add(new DateInterval("P".rand(1,5)."D"));
+                $inv->date = $date->format("Y-m-d");
+                $inv->date_echeance     = $date->format("Y-m-d");
+                $inv->total_ht          = $com->total_ht;
+				$inv->ref_supplier		= $com->thirdparty->ref.str_pad(rand(0,1000),5,"0", STR_PAD_LEFT);
+				$inv->socid				= $com->socid;
+				$inv->libelle			= "Invoice for ".$com->ref;
+				$inv->cond_reglement_id	= 2;
+                $inv->mode_reglement_id	= 2;
+                $inv->origin            = "order_supplier";
+                $inv->origin_id         = $com->id;
+				$inv->fk_account		= -1;
+                $resultInvoice = $inv->create($user);
+
+                // Add Lines
+                $com->fetch_lines();
+                $lines = $com->lines;
+                $num=count($lines);
+                for ($i = 0; $i < $num; $i++) // TODO handle subprice < 0
+                {
+                    $desc=($lines[$i]->desc?$lines[$i]->desc:$lines[$i]->libelle);
+                    $product_type=($lines[$i]->product_type?$lines[$i]->product_type:0);
+
+                    // Extrafields
+                    if (empty($conf->global->MAIN_EXTRAFIELDS_DISABLED) && method_exists($lines[$i], 'fetch_optionals')) {
+                        $lines[$i]->fetch_optionals($lines[$i]->rowid);
+                    }
+
+                    // Dates
+                    // TODO mutualiser
+                    $date_start=$lines[$i]->date_debut_prevue;
+                    if ($lines[$i]->date_debut_reel) $date_start=$lines[$i]->date_debut_reel;
+                    if ($lines[$i]->date_start) $date_start=$lines[$i]->date_start;
+                    $date_end=$lines[$i]->date_fin_prevue;
+                    if ($lines[$i]->date_fin_reel) $date_end=$lines[$i]->date_fin_reel;
+                    if ($lines[$i]->date_end) $date_end=$lines[$i]->date_end;
+
+                    // FIXME Missing special_code  into addline and updateline methods
+                    $inv->special_code = $lines[$i]->special_code;
+                    
+                    // FIXME Missing $lines[$i]->ref_supplier and $lines[$i]->label into addline and updateline methods. They are filled when coming from order for example.
+                    $result = $inv->addline(
+                        $desc,
+                        $lines[$i]->subprice,
+                        $lines[$i]->tva_tx,
+                        $lines[$i]->localtax1_tx,
+                        $lines[$i]->localtax2_tx,
+                        $lines[$i]->qty,
+                        $lines[$i]->fk_product,
+                        $lines[$i]->remise_percent,
+                        $date_start,
+                        $date_end,
+                        0,
+                        $lines[$i]->info_bits,
+                        'HT',
+                        $product_type,
+                        $lines[$i]->rang,
+                        0,
+                        $lines[$i]->array_options,
+                        $lines[$i]->fk_unit,
+                        $lines[$i]->id
+                    );
+
+                    if ($result < 0)
+                    {
+                        break;
+                    }
+                }
+
+                // Now reload line
+                $inv->fetch_lines();
+            }
+            
 
             if ($resultInvoice) {
                 echo "Invoice Created! - ".$com->getNomUrl(1)." -" ;
@@ -275,7 +368,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                                 // check if success then
                                 if ($paymentResult > 0) {
                                     // put to bank
-                                    $resPay = $pay->addPaymentToBank($user,'payment', 'Payment of '.$com->ref.' from'.$com->thirdparty->name, GETPOST("accid"), $com->thirdparty->name, '');
+                                    $resPay = $pay->addPaymentToBank($user,'payment', 'Customer Payment'.$com->thirdparty->name, GETPOST("accid"), $com->thirdparty->name, '');
                                     if ($resPay > 0) {
                                         $db->commit();
                                         $com->classifyBilled($user); // Set it's billed
@@ -304,15 +397,6 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
         var_dump($db->lasterror());
     }
 
-    if ($pay) { // Apakag juga langsung dibayar?
-        //configure the commande to be paid
-        $query = "SELECT rowid FROM llx_facture where fk_statut = 0"; // cari yang draft
-        $result = $db->query($query);
-        $com = new Commande($db);
-        if ($result) {
-            
-        }
-    }
 }
 
 if (GETPOSTISSET("btnKirim")) {
