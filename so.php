@@ -71,7 +71,7 @@ function generateSO(int $jumlah) : void {
 
     for ($j = 0; $j < $jumlah; $j++) { 
         #region Generate Data
-        $query = "SELECT * FROM ".MAIN_DB_PREFIX."product WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga");
+        $query = "SELECT p.*, rand() FROM ".MAIN_DB_PREFIX."product p WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga")." ORDER By 2 limit 2"; // Random take item
         
         /** @var DoliDB $db */
         $res = $db->query($query);
@@ -244,10 +244,12 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
     }
     
     if ($result) {
-        $i = 0;
+        $j = 0;
+        $rows = $db->num_rows($result);
+        $dataSOPO = $result; // Save check point data
         // Iterate check apakah ada invoice, kalau ga ada bikin
-        while ($i < $db->num_rows($result) && $i < $jumlah) {
-            $row = $db->fetch_array($result); 
+        while ($j < $rows && $j < $jumlah) {
+            $row = $db->fetch_array($dataSOPO); 
             // Get the link between commande and invoice, is there any
             $query = "SELECT * FROM llx_element_element WHERE sourcetype = '".$source."' AND targettype = '".$target."' AND fk_source = ". $row["rowid"];
             $elRes = $db->query($query);
@@ -400,16 +402,16 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                                         if ($type != "SO") {
                                             dispatch($com);   
                                         }
-                                        echo "berhasil payment dan tutup";
+                                        echo "berhasil payment dan tutup <br/>";
                                     } else {
                                         $db->rollback();
-                                        echo "gagal bayar ke bank";
+                                        echo "gagal bayar ke bank <br/>";
                                     }
                                 } else {
-                                    echo "gagal bayar invoice";
+                                    echo "gagal bayar invoice <br/>";
                                 }
                             } else {
-                                echo " gagal validate";
+                                echo " gagal validate <br/>";
                             }
                         }
                     }
@@ -419,7 +421,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
             } else {
                 echo "Broken, not working! <br/>";
             }
-            $i++;
+            $j++;
         }  
     } else {
         var_dump($db->lasterror());
