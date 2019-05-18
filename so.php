@@ -198,12 +198,134 @@ function generatePO(int $jumlah) : void {
     }
 }
 
+function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : void {
+    
+    include_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+    include_once DOL_DOCUMENT_ROOT."/commande/class/commande.class.php";
+    include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.commande.class.php";
+    global $db, $user;
+    
+    if ($type == 'SO') {
+        $table = 'llx_commande';
+        $source = "commande";
+        $target = "facture";
+    } else {
+        $table = 'llx_commande_fourn';
+        $source = 'order_supplier';
+        $target = 'invoice_supplier';
+    }
+
+    /** @var DoliDB $db */
+    $query = "SELECT rowid, rand() FROM ".$table." WHERE fk_statut = 3 and rowid not in (
+        select fk_source from llx_element_element where sourcetype = '$source' and targettype = '$target'
+    ) ORDER by 2"; // select query from so or po that already created 
+    $result = $db->query($query);
+
+    if ($result) {
+        $i = 0;
+        // Iterate check apakah ada invoice, kalau ga ada bikin
+        while ($i < $db->num_rows($result) && $i < $jumlah) {
+            $row = $db->fetch_array($result); 
+            // Get the link between commande and invoice, is there any
+            $query = "SELECT * FROM llx_element_element WHERE sourcetype = '".$source."' AND targettype = '".$target."' AND fk_source = ". $row["rowid"];
+            $elRes = $db->query($query);
+            
+            $inv = new Facture($db); // Create facture object
+
+            if ($type == 'SO') {
+                $com = new Commande($db); // Create the SO object and fetch
+            } else {
+                $com = new CommandeFournisseur($db); // Create the supplier invoice
+            }
+
+            $db->begin();
+            $com->fetch($row["rowid"]); // 
+            $resultInvoice = $inv->createFromOrder($com, $user); // Pass the order to be processed by the facture
+
+            if ($resultInvoice) {
+                echo "Invoice Created! - ".$com->getNomUrl(1)." -" ;
+
+                if ($pay) { // Check does it need to be paid ?
+                    $elRes = $db->query($query); // fetch the data again
+                    if ($elRes) { // if it's working then
+                        if ($db->num_rows($elRes) > 0) { // Check the data
+                            $id = $db->fetch_array($elRes);
+                            $id = $id["fk_target"];
+                            $inv->fetch($id);
+                            $status = $inv->validate($user); // Validate first
+
+                            if ($status) { // After validate, do the payment
+                                include_once DOL_DOCUMENT_ROOT."/compta/paiement/class/paiement.class.php"; // Do the payment
+                                $pay = new Paiement($db);
+                                // Get the code from ID
+                                $pay->paiementid = dol_getIdFromCode($db,'VIR','c_paiement','code','id',1);
+
+                                $date = new DateTime(date('Y-m-d',$com->date_livraison));
+                                $date->add(new DateInterval("P".rand(1,5)."D"));
+                                
+                                // Put the payment date
+                                $pay->datepaye = $date->format("Y-m-d");
+                                $pay->multicurrency_amounts = [];
+                                $com->fetch_thirdparty();
+                                $pay->note = "Terima pembayaran dari ".$com->thirdparty->name;
+                                
+                                $pay->amounts = [ $id => $com->total_ttc];
+                                $paymentResult = $pay->create($user, 1);
+
+                                // check if success then
+                                if ($paymentResult > 0) {
+                                    // put to bank
+                                    $resPay = $pay->addPaymentToBank($user,'payment', 'Payment of '.$com->ref.' from'.$com->thirdparty->name, GETPOST("accid"), $com->thirdparty->name, '');
+                                    if ($resPay > 0) {
+                                        $db->commit();
+                                        $com->classifyBilled($user); // Set it's billed
+                                        echo "berhasil payment dan tutup";
+                                    } else {
+                                        $db->rollback();
+                                        echo "gagal bayar ke bank";
+                                    }
+                                } else {
+                                    echo "gagal bayar invoice";
+                                }
+                            } else {
+                                echo " gagal validate";
+                            }
+                        }
+                    }
+                } else {
+                    $db->commit();
+                }
+            } else {
+                echo "Broken, not working! <br/>";
+            }
+            $i++;
+        }  
+    } else {
+        var_dump($db->lasterror());
+    }
+
+    if ($pay) { // Apakag juga langsung dibayar?
+        //configure the commande to be paid
+        $query = "SELECT rowid FROM llx_facture where fk_statut = 0"; // cari yang draft
+        $result = $db->query($query);
+        $com = new Commande($db);
+        if ($result) {
+            
+        }
+    }
+}
+
 if (GETPOSTISSET("btnKirim")) {
     generateSO((int) GETPOST("jumlah"));
 }
 
 if (GETPOSTISSET("btnKirimPO")) {
     generatePO((int) GETPOST("jumlah"));
+}
+
+if (GETPOSTISSET("btnBikinINV")) {
+    $pay = GETPOST("pay") == '1' ? true: false;
+    generateInvoice((int) GETPOST("jumlah"), GETPOST("btnBikinINV"), $pay);
 }
 ?>
 
@@ -221,4 +343,13 @@ if (GETPOSTISSET("btnKirimPO")) {
     <h1>Bikin PO</h1>
     <input type=text name=jumlah placeholder="jumlah generate"></br>
     <button type=submit name=btnKirimPO value=1>Generate dari SO</button>
+</form>
+
+<form method=post>
+    <h1>Bikin INV</h1>
+    <input type=text name=jumlah placeholder="jumlah generate"></br>
+    <input type="checkbox" name="pay" value="1"> Payment Directly <br/>
+    <input type=text name=accid placeholder="kode bank" value=1></br>
+    <button type=submit name=btnBikinINV value=SO>Generate dari SO</button>
+    <button type=submit name=btnBikinINV value=PO>Generate dari PO</button>
 </form>
