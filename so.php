@@ -349,7 +349,11 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
 
                             if ($status) { // After validate, do the payment
                                 include_once DOL_DOCUMENT_ROOT."/compta/paiement/class/paiement.class.php"; // Do the payment
+                                include_once DOL_DOCUMENT_ROOT."/fourn/class/paiementfourn.class.php"; // Do the payment
                                 $pay = new Paiement($db);
+                                if ($type != 'SO') {
+                                    $pay = new PaiementFourn($db);
+                                }
                                 // Get the code from ID
                                 $pay->paiementid = dol_getIdFromCode($db,'VIR','c_paiement','code','id',1);
 
