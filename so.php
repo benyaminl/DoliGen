@@ -183,8 +183,8 @@ function generatePO(int $jumlah) : void {
             $result = $com->create($user);
 
             if ($result) {
-                $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data["qty"], $data["qty"] + 5), 0, 0, 0, $data[0]["fk_product"]);
-                $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data["qty"], $data["qty"] + 5), 0, 0, 0, $data[1]["fk_product"]);
+                $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data[0]["qty"], $data[0]["qty"] + 5), 0, 0, 0, $data[0]["fk_product"]);
+                $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data[1]["qty"], $data[1]["qty"] + 5), 0, 0, 0, $data[1]["fk_product"]);
                 $db->commit();
                 echo "Berhasil - ".$j;
             } else {
@@ -265,6 +265,12 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
             $db->begin();
             $com->fetch($row["rowid"]); // 
             if ($type == 'SO') {
+                /** @var DateTime $date Data Tanggal Invoice */
+                // For data next update on invoice
+                $date = new DateTime(date('Y-m-d',$com->date_livraison));
+                $date->add(new DateInterval("P".rand(1,5)."D"));
+                $inv->date = $date->format("Y-m-d");
+                // Create
                 $resultInvoice = $inv->createFromOrder($com, $user); // Pass the order to be processed by the facture
             } else {
                 $com->fetch_thirdparty();
@@ -276,7 +282,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                 if ($com->statut == 2) {
                     $com->commande($user, $com->date, 4);
                 }
-
+                
                 $date = new DateTime(date('Y-m-d',$com->date_livraison));
                 $date->add(new DateInterval("P".rand(1,5)."D"));
                 $inv->date = $date->format("Y-m-d");
@@ -362,6 +368,13 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                             $id = $db->fetch_array($elRes);
                             $id = $id["fk_target"];
                             $inv->fetch($id);
+
+                            // If it's SO then
+                            if ($type == 'SO') {
+                                $inv->date = $date;
+                                $inv->update($user); // Tanggal salah invoice nya, jadi kacau, karena bikin pakai createFrom
+                            }
+                            
                             $status = $inv->validate($user); // Validate first
 
                             if ($status) { // After validate, do the payment
