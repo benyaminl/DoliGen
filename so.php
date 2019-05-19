@@ -65,6 +65,7 @@ if (!$res) {
 $langs->loadLangs(array('admin','orders','sendings','companies','bills','propal','supplier_proposal','deliveries','products','stocks','productbatch'));
 
 function generateSO(int $jumlah) : void {
+    echo "<h3>Generate SO</h3>";
     global $db, $user, $langs, $conf; // Panggil DB diluar
     include_once DOL_DOCUMENT_ROOT."/commande/class/commande.class.php";
     include_once DOL_DOCUMENT_ROOT."/product/class/product.class.php";
@@ -116,7 +117,7 @@ function generateSO(int $jumlah) : void {
             
             if ($result) {
                 $com->addline($taken[0]["description"], $taken[0]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[0]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
-                $com->addline($taken[1]["description"], $taken[1]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[1]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
+                $com->addline($taken[1]["description"], $taken[1]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[1]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[1]["cost_price"]);
                 $db->commit();
                 echo "Berhasil - ".$j;
             } else {
@@ -146,6 +147,7 @@ include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.commande.class.php"; //
 include_once DOL_DOCUMENT_ROOT."/fourn/class/fournisseur.product.class.php";
 
 function generatePO(int $jumlah) : void {
+    echo "<h3>Generate PO dari SO</h3>";
     global $db, $user, $langs, $conf;
     for ($j=0; $j < $jumlah; $j++) { 
         // Mulai dengan tarik data dari commande
@@ -186,7 +188,7 @@ function generatePO(int $jumlah) : void {
                 $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data[0]["qty"], $data[0]["qty"] + 5), 0, 0, 0, $data[0]["fk_product"]);
                 $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data[1]["qty"], $data[1]["qty"] + 5), 0, 0, 0, $data[1]["fk_product"]);
                 $db->commit();
-                echo "Berhasil - ".$j;
+                echo "Berhasil - ".$j."</br>";
             } else {
                 $db->rollback();
                 echo "gagal";
@@ -224,7 +226,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
         $table = 'llx_commande';
         $source = "commande";
         $target = "facture";
-        $status = 3;
+        $status = 1;
     } else {
         $table = 'llx_commande_fournisseur';
         $source = 'order_supplier';
@@ -371,7 +373,7 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
 
                             // If it's SO then
                             if ($type == 'SO') {
-                                $inv->date = $date;
+                                $inv->date = $date->format("Y-m-d");
                                 $inv->update($user); // Tanggal salah invoice nya, jadi kacau, karena bikin pakai createFrom
                             }
                             
