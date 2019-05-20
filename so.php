@@ -154,14 +154,22 @@ function generatePO(int $jumlah) : void {
         $queryBarang = "SELECT 
             RAND(),d.*, p.cost_price,
             count(d.fk_product) as jumlah_c, -- For checking how much item is there
-            (select count(dc.fk_product)
+            case when (select count(dc.fk_product)
             from
                 llx_commande_fournisseurdet dc,
                 llx_commande_fournisseur hc
             where
                 dc.fk_commande = hc.rowid and dc.fk_product = d.fk_product
                 and hc.entity = ".$conf->entity."
-            group by dc.fk_product) as jumlah_cf
+            group by dc.fk_product) is null then 0 else 
+                (select count(dc.fk_product)
+                from
+                    llx_commande_fournisseurdet dc,
+                    llx_commande_fournisseur hc
+                where
+                    dc.fk_commande = hc.rowid and dc.fk_product = d.fk_product
+                    and hc.entity = ".$conf->entity."
+                group by dc.fk_product) end as jumlah_cf
         FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product AND h.entity = ".$conf->entity." GROUP BY d.fk_product HAVING jumlah_c > jumlah_cf ORDER BY 1 LIMIT 2"; // Ambil yang jumlahnya masih di bawah jumlah commande
         $com = new CommandeFournisseur($db);
         /** @var DoliDB $db */
@@ -405,13 +413,15 @@ function generateInvoice(int $jumlah, string $type = 'SO',bool $pay = false) : v
                                 $date->add(new DateInterval("P".rand(1,5)."D"));
                                 
                                 // Put the payment date
-                                $pay->datepaye = $date->format("Y-m-d");
+                                $pay->datepaye = $date->getTimestamp();
                                 $pay->multicurrency_amounts = [];
                                 $com->fetch_thirdparty();
                                 $pay->note = "Terima pembayaran dari ".$com->thirdparty->name;
                                 
                                 $pay->amounts = [ $id => $com->total_ttc];
                                 $paymentResult = $pay->create($user, 1);
+
+                                $pay->fetch($db->last_insert_id(MAIN_DB_PREFIX.'paiment')); // Fetch the data again
 
                                 // check if success then
                                 if ($paymentResult > 0) {
@@ -491,6 +501,21 @@ if ($conf->multicompany->enabled) {
     $mulcomp->fetch($conf->entity);
     echo "</br></br>Anda sekarang pada posisi entiti :".$conf->entity." - ".$mulcomp->name;
 }
+
+include_once DOL_DOCUMENT_ROOT."/compta/paiement/class/paiement.class.php";
+$pay = new Paiement($db);
+$date = new DateTime(date('Y-m-d'));
+$date->add(new DateInterval("P".rand(1,5)."D"));
+
+// Put the payment date
+$pay->datepaye = strtotime($date->format("Y-m-d"));
+$pay->multicurrency_amounts = [];
+
+$pay->note = "Terima pembayaran dari ".$com->thirdparty->name;
+
+$pay->amounts = [ $id => $com->total_ttc];
+echo $pay->getNextNumRef('');
+//$paymentResult = $pay->create($user, 1);
 ?>
 
 <form method="post">
