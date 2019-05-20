@@ -150,12 +150,23 @@ function generatePO(int $jumlah) : void {
     echo "<h3>Generate PO dari SO</h3>";
     global $db, $user, $langs, $conf;
     for ($j=0; $j < $jumlah; $j++) { 
-        // Mulai dengan tarik data dari commande
-        $queryBarang = "SELECT RAND(),d.*, p.cost_price FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product ORDER BY 1 LIMIT 2";
+        // Mulai dengan tarik data dari commande, dari pembelian yang sudah ada dari multi company tersebut, sehingga ga ada cerita stok minus
+        $queryBarang = "SELECT 
+            RAND(),d.*, p.cost_price,
+            count(d.fk_product) as jumlah_c, -- For checking how much item is there
+            (select count(dc.fk_product)
+            from
+                llx_commande_fournisseurdet dc,
+                llx_commande_fournisseur hc
+            where
+                dc.fk_commande = hc.rowid and dc.fk_product = d.fk_product
+                and hc.entity = ".$conf->entity."
+            group by dc.fk_product) as jumlah_cf
+        FROM ".MAIN_DB_PREFIX."commande h, ".MAIN_DB_PREFIX."commandedet d, ".MAIN_DB_PREFIX."product p WHERE h.rowid = d.fk_commande AND h.fk_statut = 1 AND p.rowid = d.fk_product AND h.entity = ".$conf->entity." GROUP BY d.fk_product HAVING jumlah_c > jumlah_cf ORDER BY 1 LIMIT 2"; // Ambil yang jumlahnya masih di bawah jumlah commande
         $com = new CommandeFournisseur($db);
         /** @var DoliDB $db */
         $result = $db->query($queryBarang);
-        if ($result) {
+        if ($result && $db->num_rows($result) > 0) { // Check if it's possible to create one
             // Thirdparty
             $queryThirdparty = "SELECT rowid, RAND() as random FROM ".MAIN_DB_PREFIX."societe WHERE fournisseur = 1 ORDER BY 2 limit 1";
             $resThird = $db->query($queryThirdparty);
@@ -194,7 +205,8 @@ function generatePO(int $jumlah) : void {
                 echo "gagal";
             }
         } else {
-            echo "Select Gagal!";
+            echo "Select Gagal! Pertama gagal karena error, kedua karena data sudah tidak ada yang perlu di generate ulang <br/>";
+            echo $db->lasterror();
         }
     }
     
@@ -471,6 +483,13 @@ if (GETPOSTISSET("btnKirimPO")) {
 if (GETPOSTISSET("btnBikinINV")) {
     $pay = GETPOST("pay") == '1' ? true: false;
     generateInvoice((int) GETPOST("jumlah"), GETPOST("btnBikinINV"), $pay);
+}
+
+if ($conf->multicompany->enabled) {
+    include_once DOL_DOCUMENT_ROOT."/custom/multicompany/class/dao_multicompany.class.php";
+    $mulcomp = new DaoMulticompany($db);
+    $mulcomp->fetch($conf->entity);
+    echo "</br></br>Anda sekarang pada posisi entiti :".$conf->entity." - ".$mulcomp->name;
 }
 ?>
 
