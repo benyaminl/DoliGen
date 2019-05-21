@@ -128,6 +128,7 @@ function generateSO(int $jumlah) : void {
             if ($result) {
                 $com->addline($taken[0]["description"], $taken[0]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[0]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[0]["cost_price"]);
                 $com->addline($taken[1]["description"], $taken[1]["price_ttc"], rand(GETPOST("stokmin"), GETPOST("stokmax")), 0, 0, 0, $taken[1]["rowid"], 0, 0, 0, 'HT', 0, '','', 0, -1, 0, 0, null, $taken[1]["cost_price"]);
+                $com->generateDocument('', $langs);
                 $db->commit();
                 echo "Berhasil - ".$j;
             } else {
@@ -216,6 +217,7 @@ function generatePO(int $jumlah) : void {
             if ($result) {
                 $com->addline($data[0]["description"], $data[0]["cost_price"], rand($data[0]["qty"], $data[0]["qty"] + 5), 0, 0, 0, $data[0]["fk_product"]);
                 $com->addline($data[1]["description"], $data[1]["cost_price"], rand($data[1]["qty"], $data[1]["qty"] + 5), 0, 0, 0, $data[1]["fk_product"]);
+                $com->generateDocument('', $langs);
                 $db->commit();
                 echo "Berhasil - ".$j."</br>";
             } else {
