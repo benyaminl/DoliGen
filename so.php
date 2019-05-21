@@ -71,7 +71,7 @@ function generateSO(int $jumlah) : void {
     include_once DOL_DOCUMENT_ROOT."/product/class/product.class.php";
 
     for ($j = 0; $j < $jumlah; $j++) { 
-        #region Generate Data
+        #region [Query] Generate Data
         $query = "SELECT  rand(),p.* FROM ".MAIN_DB_PREFIX."product p WHERE price_ttc >= ".GETPOST("minharga")." AND price_ttc <= ".GETPOST("maxharga")." AND cost_price > ".GETPOST("minharga")." AND cost_price <= ".GETPOST("maxharga")." ORDER By 1 limit 2"; // Random take item
         
         /** @var DoliDB $db */
@@ -100,8 +100,18 @@ function generateSO(int $jumlah) : void {
             $pick = array_rand($data,2);
             $taken[] = $data[$pick[0]];
             $taken[] = $data[$pick[1]];
+            $start = 1549116018;
+            $end = time();
 
-            $time = mt_rand(1549116018, time()); // Random time
+            if (GETPOST("startdate") != "") {
+                $start = strtotime(GETPOST("startdate"));
+            } 
+            
+            if (GETPOST("enddate") != "") {
+                $end = strtotime(GETPOST("enddate"));
+            }
+            
+            $time = mt_rand($start, $end); // Random time
             $db->begin(); // Start Transaction
             $com = new Commande($db);
             $com->socid = $id[0]; // Ambil thirdparty data
@@ -501,25 +511,12 @@ if ($conf->multicompany->enabled) {
     $mulcomp->fetch($conf->entity);
     echo "</br></br>Anda sekarang pada posisi entiti :".$conf->entity." - ".$mulcomp->name;
 }
-
-include_once DOL_DOCUMENT_ROOT."/compta/paiement/class/paiement.class.php";
-$pay = new Paiement($db);
-$date = new DateTime(date('Y-m-d'));
-$date->add(new DateInterval("P".rand(1,5)."D"));
-
-// Put the payment date
-$pay->datepaye = strtotime($date->format("Y-m-d"));
-$pay->multicurrency_amounts = [];
-
-$pay->note = "Terima pembayaran dari ".$com->thirdparty->name;
-
-$pay->amounts = [ $id => $com->total_ttc];
-echo $pay->getNextNumRef('');
-//$paymentResult = $pay->create($user, 1);
 ?>
 
 <form method="post">
     <h1>Bikin SO</h1>
+    Tanggal Awal : <input type=date name=startdate><br/>
+    Tanggal Akhir : <input type=date name=enddate><br/>
     <input type=text name=minharga placeholder=minharga><br/>
     <input type=text name=maxharga placeholder=maxharga><br/>
     <input type=text name=stokmin placeholder=stokmin><br/>
